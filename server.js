@@ -6,42 +6,48 @@ const multer            = require('multer');
 
 const app = express();
 
-// 0) Strip any CSP header sent by the host
+// 0) Override CSP to allow SoundCloud embeds
 app.use((req, res, next) => {
-  res.removeHeader('Content-Security-Policy');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self' https://w.soundcloud.com https://api.soundcloud.com; " +
+    "script-src 'self' https://w.soundcloud.com 'unsafe-eval' 'unsafe-inline'; " +
+    "frame-src https://w.soundcloud.com; " +
+    "connect-src https://api.soundcloud.com; " +
+    "style-src 'self' 'unsafe-inline';"
+  );
   next();
 });
 
 // 1) Body parsing
 app.use(express.urlencoded({ extended: true }));
 
-// 2) Multer file uploads
+// 2) Multer setup for file uploads
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 const upload = multer({ dest: UPLOAD_DIR });
 
-// 3) Admin Basic Auth
+// 3) Protect Admin with Basic Auth
 app.use(['/admin', '/admin.html'], basicAuth({
   users: { 'WYRMWorld': 'Bigcbigc33' },
   challenge: true,
   realm: 'WYRMWorldAdmin'
 }));
 
-// Serve admin.html on both routes
-app.get('/admin',        (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
-app.get('/admin.html',   (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // 4) Submission endpoint
 let submissions = [];
 app.post('/submit', upload.single('track'), (req, res) => {
   const { name, type } = req.body;
-  const originalName   = req.file ? req.file.originalname : '';
-  const storedName     = req.file ? req.file.filename : '';
+  const originalName   = req.file?.originalname || '';
+  const storedName     = req.file?.filename     || '';
   submissions.push({ name, originalName, storedName, type });
   res.redirect('/submit.html');
 });
 
-// 5) Submissions API
+// 5) API for submissions
 app.get('/submissions', (req, res) => {
   res.json(submissions);
 });
@@ -50,10 +56,10 @@ app.get('/submissions', (req, res) => {
 app.get('/listen',      (req, res) => res.sendFile(path.join(__dirname, 'public', 'listen.html')));
 app.get('/listen.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'listen.html')));
 
-// 7) Serve uploads
+// 7) Serve uploaded files
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// 8) Static assets
+// 8) Serve static assets
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 9) Start server
